@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LOLOCHAT — Salon privé P2P sans serveur</title>
-  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <title>LOLOCHAT — Salon privé sans serveur</title>
+  <script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
   <link rel="stylesheet" href="style.css">
   <style>
     /* Styles spécifiques pour l'application LOLOCHAT */
@@ -18,8 +18,9 @@
       width: 100%;
       max-width: 820px;
       margin: 2rem auto;
-      background: var(--panel);
-      border: 1px solid var(--line);
+      background: var(--panel, #1e293b);
+      color: var(--ink, #f8fafc);
+      border: 1px solid var(--line, #334155);
       border-radius: 14px;
       overflow: hidden;
       display: flex;
@@ -27,42 +28,43 @@
     }
     .chat-header {
       padding: 16px 20px;
-      background: var(--bg);
-      border-bottom: 1px solid var(--line);
+      background: var(--bg, #0f172a);
+      border-bottom: 1px solid var(--line, #334155);
       display: flex;
       justify-content: space-between;
       align-items: center;
       gap: 12px;
       flex-wrap: wrap;
     }
-    .chat-header h1 { margin: 0; font-size: 1.15rem; color: var(--ink); }
-    .sub { color: var(--muted); font-size: 0.85rem; }
+    .chat-header h1 { margin: 0; font-size: 1.15rem; color: var(--ink, #f8fafc); }
+    .sub { color: var(--muted, #94a3b8); font-size: 0.85rem; }
     .box { padding: 20px; }
     .grid { display: grid; gap: 12px; }
     .two-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
     @media (max-width: 680px) { .two-cols { grid-template-columns: 1fr; } }
     .chat-card {
-      background: var(--bg);
-      border: 1px solid var(--line);
+      background: var(--bg, #0f172a);
+      border: 1px solid var(--line, #334155);
       border-radius: 12px;
       padding: 16px;
       display: grid;
       gap: 10px;
       align-content: start;
     }
-    input, textarea {
+    .chat-container input,
+    .chat-container textarea {
       width: 100%;
       padding: 10px 12px;
-      background: var(--panel);
-      color: var(--ink);
-      border: 1px solid var(--line);
+      background: var(--panel, #1e293b);
+      color: var(--ink, #f8fafc);
+      border: 1px solid var(--line, #334155);
       border-radius: 8px;
       font: inherit;
     }
     .chat-container button {
       padding: 10px 14px;
-      background: var(--accent);
-      color: var(--accent-ink);
+      background: var(--accent, #5cff8a);
+      color: var(--accent-ink, #06202a);
       font-weight: 700;
       border: none;
       border-radius: 8px;
@@ -77,8 +79,8 @@
     }
     .chat-container button.secondary {
       background: transparent;
-      color: var(--accent);
-      border: 1px solid var(--line);
+      color: var(--accent, #5cff8a);
+      border: 1px solid var(--line, #334155);
     }
     .chat-container button.secondary:hover {
       background: rgba(92, 255, 138, 0.1);
@@ -91,9 +93,9 @@
     .code-badge {
       font-family: monospace;
       font-size: 1rem;
-      background: var(--panel);
-      color: var(--accent);
-      border: 1px dashed var(--accent);
+      background: var(--panel, #1e293b);
+      color: var(--accent, #5cff8a);
+      border: 1px dashed var(--accent, #5cff8a);
       padding: 6px 10px;
       border-radius: 8px;
       user-select: all;
@@ -107,14 +109,14 @@
       padding: 16px 20px;
     }
     .msg {
-      background: var(--bg);
-      border: 1px solid var(--line);
+      background: var(--bg, #0f172a);
+      border: 1px solid var(--line, #334155);
       border-radius: 10px;
       padding: 12px;
     }
     .msg.sys {
       border-style: dashed;
-      color: var(--muted);
+      color: var(--muted, #94a3b8);
       font-size: 0.85rem;
       padding: 8px 12px;
     }
@@ -122,7 +124,7 @@
       display: flex;
       justify-content: space-between;
       font-size: 0.82rem;
-      color: var(--muted);
+      color: var(--muted, #94a3b8);
       margin-bottom: 6px;
     }
     .msg img {
@@ -133,22 +135,22 @@
       display: block;
     }
     .composer {
-      border-top: 1px solid var(--line);
+      border-top: 1px solid var(--line, #334155);
       padding: 16px 20px;
-      background: var(--bg);
+      background: var(--bg, #0f172a);
       display: grid;
       gap: 10px;
     }
     .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
     .error { color: #ff5c5c; font-size: 0.9rem; }
-    .ok { color: var(--accent); font-size: 0.9rem; }
+    .ok { color: var(--accent, #5cff8a); font-size: 0.9rem; }
     .pill {
       display: inline-block;
       padding: 3px 8px;
       border-radius: 999px;
       font-size: 0.78rem;
       background: rgba(92, 255, 138, 0.15);
-      color: var(--accent);
+      color: var(--accent, #5cff8a);
     }
   </style>
 </head>
@@ -172,33 +174,26 @@
   <script>
     const MAX_TEXT = 2000;
     const MAX_IMG_BYTES = 5 * 1024 * 1024;
-    const PREFIX = "lolochat-v2-";
-
-    const PEER_OPTIONS = {
-      debug: 0,
-      config: {
-        iceServers: [
-          { urls: "stun:stun.l.google.com:19302" },
-          { urls: "stun:stun1.l.google.com:19302" },
-          { urls: "stun:stun2.l.google.com:19302" },
-          { urls: "stun:global.stun.twilio.com:3478" }
-        ]
-      }
-    };
+    const BROKERS = [
+      "wss://broker.emqx.io:8084/mqtt",
+      "wss://broker.hivemq.com:8884/mqtt"
+    ];
 
     let state = {
       view: "auth",
-      role: null,
       pseudo: "",
       roomCode: "",
-      peer: null,
-      connections: [],
-      members: [],
+      topic: "",
+      client: null,
+      clientId: "lolo_" + Math.random().toString(36).slice(2, 10),
+      seenIds: new Set(),
+      membersMap: new Map(),
       messages: [],
       pendingImage: null,
       error: "",
       status: "",
-      busy: false
+      busy: false,
+      presenceTimer: null
     };
 
     function escapeHtml(str) {
@@ -219,11 +214,23 @@
       return String(raw || "").trim().toUpperCase().replace(/\s+/g, "");
     }
 
+    async function sha256(text) {
+      if (window.crypto && window.crypto.subtle) {
+        const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+        return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+      }
+      let h = 0;
+      for (let i = 0; i < text.length; i++) {
+        h = ((h << 5) - h) + text.charCodeAt(i);
+        h |= 0;
+      }
+      return Math.abs(h).toString(16);
+    }
+
     async function checkOrSaveLocalAccount(pseudo, password) {
-      const key = "lolochat_p2p_accounts";
+      const key = "lolochat_accounts_v2";
       const accounts = JSON.parse(localStorage.getItem(key) || "{}");
-      const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(password));
-      const hash = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+      const hash = await sha256(password);
       const lower = pseudo.toLowerCase();
 
       if (accounts[lower] && accounts[lower] !== hash) {
@@ -235,40 +242,359 @@
     }
 
     function addSystemMessage(text) {
-      state.messages.push({ id: Date.now() + Math.random(), system: true, text });
+      state.messages.push({ id: "sys_" + Date.now() + Math.random(), system: true, text });
       render();
     }
 
-    function broadcastAsHost(payload, excludeConn = null) {
-      state.connections.forEach(conn => {
-        if (conn.open && conn !== excludeConn) {
-          conn.send(payload);
+    function getActiveMembers() {
+      const now = Date.now();
+      const names = [state.pseudo];
+      for (const [id, info] of state.membersMap.entries()) {
+        if (now - info.lastSeen < 18000) {
+          names.push(info.pseudo);
+        } else {
+          state.membersMap.delete(id);
         }
-      });
+      }
+      return [...new Set(names)];
     }
 
-    function updateMembersList() {
-      if (state.role === "host") {
-        const names = [
-          state.pseudo,
-          ...state.connections
-            .filter(c => c.open && c.metadata?.pseudo)
-            .map(c => c.metadata.pseudo)
-        ];
-        state.members = [...new Set(names)];
-        broadcastAsHost({ type: "members", members: state.members });
+    function publishPacket(packet) {
+      if (state.client && state.client.connected && state.topic) {
+        state.client.publish(state.topic, JSON.stringify({
+          ...packet,
+          senderId: state.clientId,
+          pseudo: state.pseudo,
+          ts: Date.now()
+        }));
       }
     }
 
-    function cleanupPeer() {
-      if (state.peer) {
-        try { state.peer.destroy(); } catch {}
-        state.peer = null;
+    function cleanupClient() {
+      if (state.presenceTimer) {
+        clearInterval(state.presenceTimer);
+        state.presenceTimer = null;
       }
-      state.connections = [];
+      if (state.client) {
+        try {
+          publishPacket({ type: "leave" });
+          state.client.end(true);
+        } catch {}
+        state.client = null;
+      }
       state.busy = false;
     }
 
-    function explainPeerError(err, context = "connexion") {
-      const type = err?.type || "";
-      if (type === "network" || type === "socket-error" || type === "server-error") {
+    async function connectToRoom(pseudo, code, isCreator) {
+      if (typeof window.mqtt === "undefined") {
+        state.error = "La bibliothèque réseau (MQTT) n'a pas pu se charger. Vérifie ta connexion ou désactive un bloqueur de scripts.";
+        return render();
+      }
+
+      cleanupClient();
+      state.busy = true;
+      state.error = "";
+      state.status = "Connexion au salon sécurisé...";
+      render();
+
+      const topicHash = await sha256("lolochat-secret-salt-" + code);
+      const topic = `lolochat/v2/room/${topicHash}`;
+
+      let brokerIndex = 0;
+      let connectedOnce = false;
+
+      const tryConnect = () => {
+        const url = BROKERS[brokerIndex];
+        const client = window.mqtt.connect(url, {
+          clientId: state.clientId,
+          clean: true,
+          connectTimeout: 8000,
+          reconnectPeriod: 3000
+        });
+        state.client = client;
+
+        client.on("connect", () => {
+          connectedOnce = true;
+          client.subscribe(topic, (err) => {
+            if (err) {
+              cleanupClient();
+              state.error = "Impossible d'accéder au canal du salon.";
+              return render();
+            }
+
+            state.busy = false;
+            state.view = "chat";
+            state.pseudo = pseudo;
+            state.roomCode = code;
+            state.topic = topic;
+            state.status = "";
+            state.membersMap.clear();
+
+            publishPacket({ type: "join" });
+            addSystemMessage(
+              isCreator
+                ? `Salon créé. Partage le code ${code} en privé pour inviter tes amis.`
+                : `Connecté au salon ${code}.`
+            );
+
+            state.presenceTimer = setInterval(() => {
+              publishPacket({ type: "ping" });
+              render();
+            }, 6000);
+          });
+        });
+
+        client.on("message", (_t, payload) => {
+          try {
+            const data = JSON.parse(payload.toString());
+            if (!data || data.senderId === state.clientId) return;
+
+            state.membersMap.set(data.senderId, {
+              pseudo: data.pseudo || "Membre",
+              lastSeen: Date.now()
+            });
+
+            if (data.type === "join") {
+              publishPacket({ type: "ping" });
+              addSystemMessage(`${data.pseudo} a rejoint le salon.`);
+            } else if (data.type === "leave") {
+              state.membersMap.delete(data.senderId);
+              addSystemMessage(`${data.pseudo} a quitté le salon.`);
+            } else if (data.type === "chat" && data.msg && !state.seenIds.has(data.msg.id)) {
+              state.seenIds.add(data.msg.id);
+              state.messages.push(data.msg);
+              render();
+            } else if (data.type === "ping") {
+              render();
+            }
+          } catch {}
+        });
+
+        client.on("error", () => {
+          if (!connectedOnce) {
+            client.end(true);
+            brokerIndex++;
+            if (brokerIndex < BROKERS.length) {
+              tryConnect();
+            } else {
+              cleanupClient();
+              state.error = "Impossible de joindre le relais réseau. Vérifie ta connexion Internet.";
+              render();
+            }
+          }
+        });
+      };
+
+      tryConnect();
+    }
+
+    async function createRoom(e) {
+      e.preventDefault();
+      if (state.busy) return;
+      const pseudo = document.getElementById("hostPseudo").value.trim();
+      const pw = document.getElementById("hostPw").value;
+
+      if (!pseudo || pw.length < 4) {
+        state.error = "Entre un pseudo et un mot de passe (4 caractères minimum).";
+        return render();
+      }
+      if (!await checkOrSaveLocalAccount(pseudo, pw)) {
+        state.error = "Mot de passe incorrect pour ce pseudo sur cet appareil.";
+        return render();
+      }
+
+      await connectToRoom(pseudo, generateRoomCode(), true);
+    }
+
+    async function joinRoom(e) {
+      e.preventDefault();
+      if (state.busy) return;
+      const pseudo = document.getElementById("guestPseudo").value.trim();
+      const pw = document.getElementById("guestPw").value;
+      const code = normalizeCode(document.getElementById("joinCode").value);
+
+      if (!pseudo || pw.length < 4 || !code) {
+        state.error = "Remplis le pseudo, le mot de passe (4+ caractères) et le code d'invitation.";
+        return render();
+      }
+      if (!await checkOrSaveLocalAccount(pseudo, pw)) {
+        state.error = "Mot de passe incorrect pour ce pseudo sur cet appareil.";
+        return render();
+      }
+
+      await connectToRoom(pseudo, code, false);
+    }
+
+    function handleImage(e) {
+      const file = e.target.files[0];
+      state.error = "";
+      if (!file) { state.pendingImage = null; return; }
+      if (!["image/png", "image/gif"].includes(file.type)) {
+        state.error = "Seules les images PNG et GIF sont acceptées.";
+        e.target.value = "";
+        return render();
+      }
+      if (file.size > MAX_IMG_BYTES) {
+        state.error = "L'image dépasse la limite de 5 Mo.";
+        e.target.value = "";
+        return render();
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        state.pendingImage = reader.result;
+        state.status = "Image prête : " + file.name;
+        render();
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function sendMessage(e) {
+      e.preventDefault();
+      state.error = "";
+      state.status = "";
+      const input = document.getElementById("msgText");
+      const text = input.value.trim();
+
+      if (text.length > MAX_TEXT) {
+        state.error = "Maximum 2 000 caractères.";
+        return render();
+      }
+      if (!text && !state.pendingImage) {
+        state.error = "Écris un message ou choisis une image PNG/GIF.";
+        return render();
+      }
+
+      const msg = {
+        id: Date.now() + "_" + Math.random().toString(36).slice(2, 8),
+        author: state.pseudo,
+        text,
+        image: state.pendingImage,
+        time: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })
+      };
+
+      state.seenIds.add(msg.id);
+      state.messages.push(msg);
+      publishPacket({ type: "chat", msg });
+
+      state.pendingImage = null;
+      render();
+    }
+
+    function copyCode() {
+      navigator.clipboard?.writeText(state.roomCode);
+      state.status = "Code copié dans le presse-papiers !";
+      render();
+    }
+
+    function leaveRoom() {
+      cleanupClient();
+      state = {
+        view: "auth",
+        pseudo: "",
+        roomCode: "",
+        topic: "",
+        client: null,
+        clientId: "lolo_" + Math.random().toString(36).slice(2, 10),
+        seenIds: new Set(),
+        membersMap: new Map(),
+        messages: [],
+        pendingImage: null,
+        error: "",
+        status: "",
+        busy: false,
+        presenceTimer: null
+      };
+      render();
+    }
+
+    window.addEventListener("beforeunload", cleanupClient);
+
+    function render() {
+      const app = document.getElementById("app");
+      if (!app) return;
+
+      if (state.view === "auth") {
+        app.innerHTML = `
+          <div class="chat-header">
+            <div>
+              <h1>LOLOCHAT</h1>
+              <div class="sub">Salon privé sécurisé sans serveur</div>
+            </div>
+          </div>
+          <div class="box grid">
+            ${state.error ? `<div class="error">${escapeHtml(state.error)}</div>` : ""}
+            ${state.status ? `<div class="ok">${escapeHtml(state.status)}</div>` : ""}
+            <div class="two-cols">
+              <form class="chat-card" onsubmit="createRoom(event)">
+                <strong>1. Créer un salon</strong>
+                <div class="sub">Génère un code unique pour inviter tes amis.</div>
+                <input id="hostPseudo" placeholder="Ton pseudo" maxlength="25" required />
+                <input id="hostPw" type="password" placeholder="Mot de passe" required />
+                <button type="submit" ${state.busy ? "disabled" : ""}>Créer le salon</button>
+              </form>
+
+              <form class="chat-card" onsubmit="joinRoom(event)">
+                <strong>2. Rejoindre un salon</strong>
+                <div class="sub">Entre le code fourni par ton ami.</div>
+                <input id="guestPseudo" placeholder="Ton pseudo" maxlength="25" required />
+                <input id="guestPw" type="password" placeholder="Mot de passe" required />
+                <input id="joinCode" placeholder="Code (ex: LOLO-1234-ABCD)" required />
+                <button type="submit" class="secondary" ${state.busy ? "disabled" : ""}>Rejoindre</button>
+              </form>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      const activeMembers = getActiveMembers();
+
+      app.innerHTML = `
+        <div class="chat-header">
+          <div>
+            <h1>LOLOCHAT <span class="pill">${activeMembers.length} en ligne</span></h1>
+            <div class="sub">Connecté : <strong>${escapeHtml(state.pseudo)}</strong> (${activeMembers.map(escapeHtml).join(", ")})</div>
+          </div>
+          <div class="row">
+            <span class="code-badge" title="Code à partager">${escapeHtml(state.roomCode)}</span>
+            <button class="secondary" onclick="copyCode()">Copier</button>
+            <button class="danger" onclick="leaveRoom()">Quitter</button>
+          </div>
+        </div>
+        ${(state.error || state.status) ? `<div class="box" style="padding-bottom:0">
+          ${state.error ? `<div class="error">${escapeHtml(state.error)}</div>` : ""}
+          ${state.status ? `<div class="ok">${escapeHtml(state.status)}</div>` : ""}
+        </div>` : ""}
+        <div class="messages" id="msgList">
+          ${state.messages.map(m => m.system
+            ? `<div class="msg sys">${escapeHtml(m.text)}</div>`
+            : `
+              <div class="msg">
+                <div class="msg-head">
+                  <strong>${escapeHtml(m.author)}</strong>
+                  <span>${escapeHtml(m.time)}</span>
+                </div>
+                ${m.text ? `<div>${escapeHtml(m.text).replaceAll("\n", "<br>")}</div>` : ""}
+                ${m.image ? `<img src="${m.image}" alt="Image jointe" />` : ""}
+              </div>
+            `
+          ).join("")}
+        </div>
+        <form class="composer" onsubmit="sendMessage(event)">
+          <textarea id="msgText" rows="3" maxlength="${MAX_TEXT}" placeholder="Écris ton message (max 2 000 caractères)..."></textarea>
+          <div class="row" style="justify-content:space-between">
+            <input type="file" accept="image/png,image/gif" onchange="handleImage(event)" style="max-width:280px" />
+            <button type="submit">Envoyer</button>
+          </div>
+        </form>
+      `;
+
+      const list = document.getElementById("msgList");
+      if (list) list.scrollTop = list.scrollHeight;
+    }
+
+    render();
+  </script>
+  <script src="script.js" defer></script>
+</body>
+</html>

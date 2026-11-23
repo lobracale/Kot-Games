@@ -5,121 +5,22 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0c1210">
 <title>Loïc Bracale – Joueur de jeux vidéo</title>
-<style>
-:root{
-  --bg:#0c1210; --panel:#141d19; --line:#25362f; --ink:#e8f1ec; --muted:#93a89d;
-  --accent:#5cff8a; --accent-ink:#06160c;
-}
-*{box-sizing:border-box}
-html{scroll-behavior:smooth;scroll-padding-top:4.5rem}
-body{margin:0;background:var(--bg);color:var(--ink);
-  font:1.05rem/1.65 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-a{color:inherit}
-:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
-.wrap{max-width:62rem;margin:0 auto;padding:0 1.25rem}
-
-/* Navigation */
-.top{position:sticky;top:0;z-index:10;background:rgba(12,18,16,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--line)}
-.top .wrap{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding-top:.8rem;padding-bottom:.8rem;flex-wrap:wrap}
-.logo{font-weight:800;text-decoration:none;letter-spacing:.02em}
-.logo span{color:var(--accent)}
-.top nav{display:flex;gap:1.1rem;flex-wrap:wrap}
-.top nav a{text-decoration:none;color:var(--muted)}
-.top nav a:hover{color:var(--accent)}
-
-/* Hero : le nom est l'élément marquant */
-.hero{padding:5rem 0 4rem;border-bottom:1px solid var(--line);
-  background:radial-gradient(ellipse at 85% 0%,rgba(92,255,138,.14),transparent 55%)}
-.hero p.kicker{color:var(--accent);font-weight:700;margin:0 0 .5rem}
-h1{font-size:clamp(3rem,11vw,7rem);line-height:.95;margin:0 0 1.25rem;font-weight:900;letter-spacing:-.03em}
-.hero .lead{max-width:34rem;color:var(--muted);font-size:1.2rem;margin:0 0 2rem}
-.btn{display:inline-block;padding:.8rem 1.4rem;border-radius:8px;font-weight:700;text-decoration:none;border:2px solid var(--accent)}
-.btn.primary{background:var(--accent);color:var(--accent-ink)}
-.btn.primary:hover{background:#8dffad}
-.btn.ghost{color:var(--accent);margin-left:.5rem}
-.btn.ghost:hover{background:rgba(92,255,138,.1)}
-
-section{padding:3.5rem 0;border-bottom:1px solid var(--line)}
-h2{font-size:1.8rem;margin:0 0 1.5rem}
-.grid{display:grid;gap:1.25rem;grid-template-columns:repeat(auto-fit,minmax(15rem,1fr))}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:1.4rem}
-.card h3{margin:0 0 .25rem;font-size:1.25rem}
-.card .tag{color:var(--accent);font-size:.95rem;margin:0 0 .6rem}
-.card p{margin:0;color:var(--muted)}
-.card.empty{border-style:dashed}
-.card .play{display:inline-block;margin-top:1rem;padding:.6rem 1.1rem;border-radius:8px;background:var(--accent);color:var(--accent-ink);font-weight:700;text-decoration:none}
-.card .play:hover{background:#8dffad}
-
-.about{display:grid;gap:2rem;grid-template-columns:1fr}
-@media(min-width:48rem){.about{grid-template-columns:1.2fr 1fr}}
-.about p{margin:0 0 1rem;color:var(--muted)}
-.facts{list-style:none;margin:0;padding:0}
-.facts li{display:flex;justify-content:space-between;gap:1rem;padding:.7rem 0;border-bottom:1px solid var(--line)}
-.facts li span:first-child{color:var(--muted)}
-.facts li span:last-child{font-weight:600;text-align:right}
-
-.links{display:flex;flex-wrap:wrap;gap:.75rem}
-.links a{padding:.7rem 1.2rem;border:1px solid var(--line);border-radius:8px;background:var(--panel);text-decoration:none;font-weight:600}
-.links a:hover{border-color:var(--accent);color:var(--accent)}
-
-footer{padding:2rem 0;color:var(--muted);font-size:.95rem}
-@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
-
-/* Icônes de profils (style vert) */
-.socials{display:flex;flex-wrap:wrap;gap:14px}
-.social{position:relative;width:56px;height:56px;display:grid;place-items:center;border-radius:12px;color:var(--accent);
-  background:rgba(92,255,138,.12);border:2px solid rgba(92,255,138,.18);
-  transition:transform .2s ease,background .2s ease,box-shadow .2s ease}
-.social:hover,.social:focus-visible{transform:translateY(-3px);background:rgba(92,255,138,.22);box-shadow:0 0 18px rgba(92,255,138,.28)}
-.social svg{width:28px;height:28px}
-.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-
-/* Écran d'entrée */
-.enter-screen{position:fixed;inset:0;z-index:100;display:grid;place-items:center;background:#0a0a0a;cursor:pointer;user-select:none;transition:opacity .6s ease,visibility .6s ease}
-.enter-screen.hidden{opacity:0;visibility:hidden;pointer-events:none}
-.enter-text{font-size:1.9rem;font-weight:700;color:var(--accent);text-shadow:0 0 16px var(--accent);animation:pulse 1.8s infinite ease-in-out}
-@keyframes pulse{50%{opacity:.55}}
-
-/* Neige */
-.snow{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
-.flake{position:absolute;top:-30px;color:var(--accent);text-shadow:0 0 8px var(--accent);animation:fall linear infinite}
-@keyframes fall{to{transform:translate3d(var(--drift),110vh,0) rotate(360deg)}}
-@media (prefers-reduced-motion:reduce){.social{transition:none}.social:hover{transform:none}.enter-text{animation:none}}
-</style>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="enter-screen" id="enter" role="button" tabindex="0" aria-label="Entrer sur le site"><span class="enter-text">Clique pour entrer</span></div>
+<div class="enter-screen" id="enter" role="button" tabindex="0" aria-label="Entrer sur le site">
+  <span class="enter-text">Clique pour entrer</span>
+</div>
 <div class="snow" aria-hidden="true"></div>
 <noscript><style>.enter-screen{display:none}</style></noscript>
-<script>
-(function(){
-  var enter=document.getElementById("enter"),snow=document.querySelector(".snow"),seen=false;
-  try{seen=sessionStorage.getItem("entered")==="1"}catch(e){}
-  function close(){enter.classList.add("hidden");try{sessionStorage.setItem("entered","1")}catch(e){}}
-  if(seen)enter.classList.add("hidden");else enter.focus();
-  enter.addEventListener("click",close);
-  enter.addEventListener("keydown",function(e){if(e.key==="Enter"||e.key===" "){e.preventDefault();close()}});
-  if(window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches)return;
-  for(var i=0;i<28;i++){
-    var f=document.createElement("span");
-    f.className="flake";f.textContent="⌖°❅°⌖";
-    f.style.left=(Math.random()*100)+"%";
-    f.style.fontSize=(10+Math.random()*12)+"px";
-    f.style.opacity=(0.25+Math.random()*0.7);
-    f.style.animationDuration=(6+Math.random()*10)+"s";
-    f.style.animationDelay=(Math.random()*-12)+"s";
-    f.style.setProperty("--drift",(-80+Math.random()*160)+"px");
-    snow.appendChild(f);
-  }
-})();
-</script>
 
 <header class="top">
   <div class="wrap">
-    <a class="logo" href="#accueil">LOÏC<span>.</span>BRACALE</a>
+    <a class="logo" href="index.html">LOÏC<span>.</span>BRACALE</a>
     <nav aria-label="Navigation principale">
       <a href="#jeux">Mes jeux</a>
-      <a href="#profil">Profil de joueur</a>
+      <a href="#profil">Profil</a>
+      <a href="chat.html">Mon chat 🐱</a>
       <a href="#contact">Me retrouver</a>
     </nav>
   </div>
@@ -130,9 +31,9 @@ footer{padding:2rem 0;color:var(--muted);font-size:.95rem}
     <div class="wrap">
       <p class="kicker">Joueur de jeux vidéo</p>
       <h1>Loïc<br>Bracale</h1>
-      <p class="lead">Je joue, je progresse et j’aime partager ma passion du jeu vidéo. Voici mes jeux, mon style et où me retrouver.</p>
+      <p class="lead">Je joue, je progresse et j’aime partager ma passion du jeu vidéo. Découvre mes jeux, mon profil et la page dédiée à mon chat.</p>
       <a class="btn primary" href="#jeux">Voir mes jeux</a>
-      <a class="btn ghost" href="#contact">Me retrouver en ligne</a>
+      <a class="btn ghost" href="chat.html">Découvrir mon chat 🐱</a>
     </div>
   </div>
 
@@ -143,23 +44,18 @@ footer{padding:2rem 0;color:var(--muted);font-size:.95rem}
         <article class="card">
           <h3>Valorant</h3>
           <p class="tag">FPS tactique en équipe</p>
-          <p>Mon jeu principal : jeu d’équipe, placement et communication. À compléter : mon rang, mes agents préférés.</p>
+          <p>Mon jeu principal : jeu d’équipe, placement et communication.</p>
         </article>
         <article class="card">
           <h3>Roblox</h3>
           <p class="tag">Jeux créés par la communauté</p>
-          <p>Je joue sur plusieurs univers. À compléter : mes expériences préférées.</p>
+          <p>Je joue sur plusieurs univers et expériences entre amis.</p>
         </article>
         <article class="card">
           <h3>L’imposteur</h3>
           <p class="tag">Jeu de mots entre amis</p>
-          <p>Tout le monde a le même mot sauf un : l’imposteur. Trouvez-le avant qu’il ne passe inaperçu. À partir de 3 joueurs, sur un seul appareil.</p>
+          <p>Tout le monde a le même mot sauf un : l’imposteur. À partir de 3 joueurs, en local ou en ligne.</p>
           <a class="play" href="imposteur.html">Jouer</a>
-        </article>
-        <article class="card empty">
-          <h3>Votre prochain jeu</h3>
-          <p class="tag">À ajouter</p>
-          <p>Copiez une carte <code>&lt;article class="card"&gt;</code> pour ajouter un jeu.</p>
         </article>
       </div>
     </div>
@@ -169,14 +65,13 @@ footer{padding:2rem 0;color:var(--muted);font-size:.95rem}
     <div class="wrap about">
       <div>
         <h2>Profil de joueur</h2>
-        <p>Je suis Loïc Bracale, passionné de jeux vidéo. Je joue pour progresser, pour m’amuser avec mes amis et pour relever des défis.</p>
-        <p>À compléter avec vos mots : ce qui vous plaît dans le jeu, vos meilleurs moments, ce que vous aimeriez accomplir.</p>
+        <p>Je suis Loïc Bracale, passionné de jeux vidéo. Je joue pour progresser, pour m’amuser avec mes amis et relever des défis.</p>
       </div>
       <ul class="facts" aria-label="En bref">
         <li><span>Plateforme</span><span>PC</span></li>
         <li><span>Jeu principal</span><span>Valorant</span></li>
-        <li><span>Style</span><span>À compléter</span></li>
-        <li><span>Disponible</span><span>À compléter</span></li>
+        <li><span>Mascotte</span><span><a href="chat.html" style="color:var(--accent)">Voir mon chat →</a></span></li>
+        <li><span>Statut</span><span>Disponible</span></li>
       </ul>
     </div>
   </section>
@@ -185,7 +80,6 @@ footer{padding:2rem 0;color:var(--muted);font-size:.95rem}
     <div class="wrap">
       <h2>Me retrouver</h2>
       <div class="socials">
-        <!-- Remplacez chaque # par le vrai lien -->
         <a class="social" href="#" target="_blank" rel="noopener noreferrer" aria-label="Profil Valorant" title="Profil Valorant">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5l9 14L21 5"/><path d="M8 5l4 6.5"/></svg>
           <span class="sr">Profil Valorant</span>
@@ -207,5 +101,6 @@ footer{padding:2rem 0;color:var(--muted);font-size:.95rem}
   <div class="wrap">© 2026 Loïc Bracale</div>
 </footer>
 
+<script src="script.js"></script>
 </body>
 </html>

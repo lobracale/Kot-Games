@@ -125,10 +125,7 @@ function bind(){
   if($("mOnline"))$("mOnline").onclick=onlineInit;
   if($("reset"))$("reset").onclick=function(){S.players=[];S.step="setup";render()};
 }
-/* ===== Mode en ligne (serveur de messages WebSocket : l’hôte fait office de serveur de jeu) ===== */
 var N=null;
-/* Les messages passent par un serveur public MQTT (WebSocket) : marche sur tous les réseaux.
-   La 1re lettre du code indique quel serveur est utilisé (hôte et joueurs tombent toujours sur le même). */
 var TP="imposteur-loic-v1/";
 var BR=["wss://broker.emqx.io:8084/mqtt","wss://broker.hivemq.com:8884/mqtt","wss://test.mosquitto.org:8081"];
 var GR=["ABCDEFGH","JKLMNPQR","STUVWXYZ"];
@@ -150,8 +147,6 @@ function onlineInit(){
 }
 function pl(id){return N.G.players.filter(function(p){return p.id===id})[0]}
 function pname(id){var p=N.V.players.filter(function(q){return q.id===id})[0];return p?esc(p.name):"?"}
-
-/* ---------- Hôte ---------- */
 function view(id){
   var G=N.G,v={phase:G.phase,order:G.order,rounds:G.rounds,clues:G.clues,voted:Object.keys(G.votes),me:id,
     players:G.players.map(function(p){return {id:p.id,name:p.name,on:p.on}})};
@@ -250,8 +245,6 @@ function oStart(rounds){
   G.clues=[];G.votes={};G.phase="clue";N.show=false;N.err="";
   adv();broadcast();
 }
-
-/* ---------- Joueur ---------- */
 function oFail(msg){
   N.err=msg;N.wait=false;N.V=null;N.code="";
   var p=N.peer;N.peer=null;N.conn=null;N.cid="";
@@ -260,96 +253,125 @@ function oFail(msg){
 }
 function oJoin(name,code){
   if(typeof mqtt==="undefined"){N.err="Le mode en ligne n’a pas pu se charger (connexion bloquée ?).";return oRender()}
-  var k=-1;for(var i=0;i<GR.length;i++)if(GR[i].indexOf(code[0])>=0)k=i;
-  if(k<0){N.err="Code introuvable.";return oRender()}
-  N.wait=true;N.err="";oRender();
-  var cid="p"+Math.random().toString(36).slice(2,10);N.cid=cid;
-  var cl=mqtt.connect(BR[k],{clientId:"imp"+cid,keepalive:30,reconnectPeriod:2000,connectTimeout:10000,will:{topic:TP+code+"/h",payload:JSON.stringify({t:"bye",from:cid}),qos:0}});
+  code=code.toUpperCase().replace(/[^A-Z]/g,"").slice(0,4);
+  if(code.length!==4){N.err="Le code contient 4 lettres.";return oRender()}
+  var bi=0;for(var k=0;k<GR.length;k++)if(GR[k].indexOf(code[0])>=0)bi=k;
+  N.wait=true;N.err="";N.code=code;N.cid="c"+Math.random().toString(36).slice(2,10);oRender();
+  var cl=mqtt.connect(BR[bi],{clientId:"impC"+N.cid,keepalive:30,reconnectPeriod:2000,connectTimeout:7000,will:{topic:TP+code+"/h",payload:JSON.stringify({t:"bye",from:N.cid}),qos:0}});
   N.peer=cl;
+  var joined=false;
+  var t=setTimeout(function(){if(!joined&&N.peer===cl)oFail("Partie introuvable ou hôte déconnecté.")},9000);
   cl.on("error",function(){});
-  var timer=setTimeout(function(){
-    if(N.peer!==cl||N.V)return;
-    oFail(cl.connected?"Code introuvable ou hôte hors ligne.":"Impossible de joindre le serveur de jeu (réseau bloqué ?).");
-  },12000);
   cl.on("connect",function(){
-    cl.subscribe([TP+code+"/c/"+cid,TP+code+"/all"],function(err){
-      if(err||N.peer!==cl)return;
-      cl.publish(TP+code+"/h",JSON.stringify(N.V?{t:"sync",from:cid}:{t:"join",from:cid,name:name}));
+    if(N.peer!==cl)return;
+    cl.subscribe([TP+code+"/c/"+N.cid,TP+code+"/all"],function(err){
+      if(err){clearTimeout(t);return oFail("Erreur réseau.")}
+      N.conn={send:function(m){m.from=N.cid;pub(TP+code+"/h",m)}};
+      N.conn.send({t:joined?"sync":"join",name:name});
     });
   });
   mqs(cl,function(m){
-    if(N.peer!==cl)return;
-    if(m.t==="state"){clearTimeout(timer);N.code=code;N.wait=false;N.V=m.v;oRender()}
-    else if(m.t==="err"){clearTimeout(timer);oFail(m.m)}
-    else if(m.t==="hostbye"&&N.V)oFail("L’hôte a quitté la partie.");
+    if(N.peer!==cl||!m)return;
+    if(m.t==="hostbye"){clearTimeout(t);return oFail("L’hôte a fermé la partie.")}
+    if(m.t==="state"){
+      if(!joined){joined=true;clearTimeout(t);N.wait=false}
+      if(!N.V||N.V.phase!==m.v.phase)N.show=false;
+      N.V=m.v;oRender();
+    }else if(m.t==="err"){clearTimeout(t);oFail(m.m)}
   });
 }
-function act(m){
+function oSend(m){
   if(N.isHost)hostMsg("H",m,null);
-  else if(N.peer&&N.peer.connected){m.from=N.cid;pub(TP+N.code+"/h",m)}
+  else if(N.conn)N.conn.send(m);
 }
-
-/* ---------- Affichage ---------- */
 function oRender(){
-  if(S.step!=="online"||!N)return;
-  var kv=gid("ocl")?gid("ocl").value:"",h;
-  if(N.wait)h='<div class="card center"><p>Connexion…'+(N.rel?' (mode relais, un peu plus long)':'')+'</p></div>';
-  else if(!N.V){
-    h='<div class="card"><h2>En ligne</h2><label for="on">Ton nom</label><input id="on" maxlength="16" autocomplete="off" value="'+esc(N.name)+'"><button id="oc">Créer une partie</button><label for="oj">Ou rejoins avec un code</label><div class="row"><input id="oj" class="up" maxlength="4" placeholder="ABCD" autocomplete="off"><button id="ojb" style="padding:0 18px">Rejoindre</button></div>'+(N.err?'<p class="warn">'+esc(N.err)+'</p>':'')+'<p class="center" style="color:var(--muted);font-size:.9rem">L’hôte doit garder la page ouverte pendant la partie.</p><button class="ghost" id="oh">Accueil</button></div>'+rules();
-  }else h=oGame();
+  var h="";
+  if(!N.V){
+    h+='<div class="card"><h2>En ligne</h2><label for="onm">Ton prénom</label><input id="onm" maxlength="16" placeholder="Entre ton nom" autocomplete="off" value="'+esc(N.name)+'">';
+    h+='<button id="ocr"'+(N.wait?' disabled':'')+'>Créer une partie</button>';
+    h+='<label for="ocd">Ou rejoindre avec un code</label><div class="row"><input id="ocd" class="up" maxlength="4" placeholder="ABCD" autocomplete="off" value="'+esc(N.code)+'"><button id="ojn" style="padding:0 18px"'+(N.wait?' disabled':'')+'>Rejoindre</button></div>';
+    if(N.wait)h+='<p class="center">Connexion en cours…</p>';
+    if(N.err)h+='<p class="center warn">'+esc(N.err)+'</p>';
+    h+='<button class="ghost" id="obk">Accueil</button></div>'+rules();
+  }else{
+    var V=N.V,n=V.order.length;
+    h+='<div class="card center"><p>Code de la partie</p><div class="code">'+esc(N.code)+'</div><p>Partage ce code avec les autres joueurs.</p></div>';
+    if(V.phase==="lobby"){
+      h+='<div class="card"><h2>Joueurs ('+V.players.length+')</h2><ul class="chips">';
+      V.players.forEach(function(p){h+='<li>'+esc(p.name)+(p.id==="H"?' (hôte)':'')+'</li>'});
+      h+='</ul>';
+      if(N.isHost){
+        h+='<label for="ord">Tours d’indices</label><select id="ord">';
+        [1,2,3].forEach(function(r){h+='<option value="'+r+'"'+(r===N.G.rounds?' selected':'')+'>'+r+'</option>'});
+        h+='</select><button id="ogo"'+(V.players.length<3?' disabled':'')+'>Lancer la partie</button>';
+        if(V.players.length<3)h+='<p class="center">En attente d’au moins 3 joueurs…</p>';
+        if(N.err)h+='<p class="center warn">'+esc(N.err)+'</p>';
+      }else{h+='<p class="center">En attente que l’hôte lance la partie…</p>'}
+      h+='<button class="ghost" id="olv">Quitter</button></div>'+rules();
+    }else{
+      h+='<div class="card center">';
+      if(!N.show)h+='<button id="osw">Afficher mon mot</button>';
+      else h+='<p>Ton mot est :</p><div class="big">'+esc(V.word)+'</div><button class="ghost" id="ohd">Masquer</button>';
+      h+='</div>';
+      if(V.phase==="clue"){
+        var turnId=V.order[V.clues.length%n],rd=Math.floor(V.clues.length/n)+1;
+        h+='<div class="card center"><h2>Tour '+rd+' / '+V.rounds+'</h2>';
+        if(turnId===V.me){h+='<p>C’est à <b>toi</b> d’écrire un mot.</p><input id="ocl" maxlength="24" placeholder="Ton indice" autocomplete="off"><button id="ook">Valider</button>'}
+        else{h+='<p>En attente de <b>'+pname(turnId)+'</b>…</p>'}
+        if(V.clues.length){h+='<div class="log">';V.clues.forEach(function(c){h+='<div><b>'+pname(c.id)+'</b> : '+esc(c.text)+'</div>'});h+='</div>'}
+        h+='<button class="ghost" id="olv">Quitter</button></div>';
+      }else if(V.phase==="vote"){
+        h+='<div class="card center"><h2>Vote</h2>';
+        if(V.voted.indexOf(V.me)<0){
+          h+='<p>Qui est l’imposteur ?</p>';
+          V.order.forEach(function(id){if(id!==V.me)h+='<button class="vote" data-ov="'+esc(id)+'">'+pname(id)+'</button>'});
+        }else{
+          var rem=V.players.filter(function(p){return p.on&&V.voted.indexOf(p.id)<0}).length;
+          h+='<p>Vote enregistré ! En attente des autres joueurs ('+rem+' restant'+(rem>1?'s':'')+')…</p>';
+        }
+        h+='<div class="log">';V.clues.forEach(function(c){h+='<div><b>'+pname(c.id)+'</b> : '+esc(c.text)+'</div>'});h+='</div>';
+        h+='<button class="ghost" id="olv">Quitter</button></div>';
+      }else if(V.phase==="result"){
+        var t={};V.order.forEach(function(id){t[id]=0});
+        Object.keys(V.votes).forEach(function(k){var x=V.votes[k];if(x in t)t[x]++});
+        var max=0;V.order.forEach(function(id){if(t[id]>max)max=t[id]});
+        var top=V.order.filter(function(id){return t[id]===max});
+        var caught=top.length===1&&top[0]===V.imp;
+        h+='<div class="card center"><h2>Résultat</h2><p class="win">'+(caught?'Les joueurs gagnent !':'L’imposteur gagne !')+'</p><p>L’imposteur était <b>'+pname(V.imp)+'</b>.</p><p>Mot du groupe : <b>'+esc(V.w1)+'</b><br>Mot de l’imposteur : <b>'+esc(V.w2)+'</b></p><div class="log">';
+        V.order.forEach(function(id){h+='<div>'+pname(id)+' : '+t[id]+' vote'+(t[id]>1?'s':'')+'</div>'});
+        h+='</div>';
+        if(N.isHost)h+='<button id="oag">Rejouer</button>';
+        else h+='<p>En attente de l’hôte pour rejouer…</p>';
+        h+='<button class="ghost" id="olv">Quitter</button></div>';
+      }
+    }
+  }
   app.innerHTML=h;oBind();
-  if(kv&&gid("ocl")){gid("ocl").value=kv;gid("ocl").focus()}
-}
-function oGame(){
-  var V=N.V,me=V.me,n=V.order.length,ps=V.players,h;
-  var head='<div class="card center"><p>Code de la partie</p><div class="code">'+esc(N.code)+'</div></div>';
-  var leave='<button class="ghost" id="oh">Quitter</button>';
-  if(V.phase==="lobby"){
-    h=head+'<div class="card"><h2>Joueurs ('+ps.length+')</h2><ul class="chips">'+ps.map(function(p){return '<li>'+esc(p.name)+(p.id==="H"?' (hôte)':'')+(p.id===me?' – toi':'')+'</li>'}).join('')+'</ul>';
-    if(N.isHost){
-      var cur=N.G.rounds;
-      h+='<label for="orr">Tours d’indices</label><select id="orr">'+[1,2,3].map(function(r){return '<option'+(r===cur?' selected':'')+'>'+r+'</option>'}).join('')+'</select><button id="ost"'+(ps.length<3?' disabled':'')+'>Lancer la partie</button>'+(ps.length<3?'<p class="center">Il faut au moins 3 joueurs. Partage le code.</p>':'');
-      if(N.err)h+='<p class="warn center">'+esc(N.err)+'</p>';
-    }else h+='<p class="center">En attente de l’hôte…</p>';
-    return h+leave+'</div>';
-  }
-  var cl=V.clues;
-  var mw='<div class="card center"><p>Ton mot</p>'+(N.show?'<div class="big">'+esc(V.word)+'</div>':'')+'<button class="ghost" id="osh">'+(N.show?'Masquer':'Afficher')+' mon mot</button></div>';
-  var log=cl.length?'<div class="log">'+cl.map(function(c){return '<div><b>'+pname(c.id)+'</b> : '+esc(c.text)+'</div>'}).join('')+'</div>':'';
-  if(V.phase==="clue"){
-    var cu=V.order[cl.length%n],r=Math.floor(cl.length/n)+1;
-    h=head+mw+'<div class="card center"><h2>Tour '+r+' / '+V.rounds+'</h2>';
-    if(cu===me)h+='<p class="warn">À toi d’écrire un mot !</p><input id="ocl" maxlength="24" placeholder="Ton indice" autocomplete="off"><button id="ook">Valider</button>';
-    else h+='<p>C’est à <b>'+pname(cu)+'</b> d’écrire un mot…</p>';
-    return h+log+'</div>';
-  }
-  if(V.phase==="vote"){
-    h=head+mw+'<div class="card center"><h2>Vote</h2>';
-    if(V.voted.indexOf(me)>=0)h+='<p>Vote enregistré. En attente des autres ('+V.voted.length+' / '+n+')…</p>';
-    else{h+='<p>Qui est l’imposteur ?</p>';V.order.forEach(function(u){if(u!==me)h+='<button class="vote" data-ov="'+esc(u)+'">'+pname(u)+'</button>'})}
-    return h+log+'</div>';
-  }
-  var t={},max=0;
-  Object.keys(V.votes).forEach(function(k){var x=V.votes[k];t[x]=(t[x]||0)+1});
-  V.order.forEach(function(u){if((t[u]||0)>max)max=t[u]});
-  var top=V.order.filter(function(u){return (t[u]||0)===max}),caught=top.length===1&&top[0]===V.imp;
-  h=head+'<div class="card center"><h2>Résultat</h2><p class="win">'+(caught?'Les joueurs gagnent !':'L’imposteur gagne !')+'</p><p>L’imposteur était <b>'+pname(V.imp)+'</b>.</p><p>Mot du groupe : <b>'+esc(V.w1)+'</b><br>Mot de l’imposteur : <b>'+esc(V.w2)+'</b></p><div class="log">'+V.order.map(function(u){var k=t[u]||0;return '<div>'+pname(u)+' : '+k+' vote'+(k>1?'s':'')+'</div>'}).join('')+'</div>'+log;
-  h+=N.isHost?'<button id="oag">Rejouer</button>':'<p>L’hôte peut relancer une manche.</p>';
-  return h+leave+'</div>';
 }
 function oBind(){
-  if(gid("oh"))gid("oh").onclick=function(){nres();S.step="home";render()};
-  if(gid("oc"))gid("oc").onclick=function(){var v=gid("on").value.trim();N.name=v;if(!v){N.err="Entre ton nom.";return oRender()}oCreate(v)};
-  if(gid("ojb"))gid("ojb").onclick=function(){var v=gid("on").value.trim(),c=gid("oj").value.trim().toUpperCase();N.name=v;if(!v||c.length!==4){N.err="Entre ton nom et un code à 4 lettres.";return oRender()}oJoin(v,c)};
-  if(gid("osh"))gid("osh").onclick=function(){N.show=!N.show;oRender()};
-  if(gid("ost"))gid("ost").onclick=function(){oStart(+gid("orr").value)};
-  if(gid("oag"))gid("oag").onclick=function(){oStart(N.G.rounds)};
+  function nm(){var v=(gid("onm")?gid("onm").value:"").trim();if(!v){N.err="Entre ton prénom d’abord.";oRender();return""}N.name=v;return v}
+  if(gid("ocr"))gid("ocr").onclick=function(){var v=nm();if(v)oCreate(v)};
+  if(gid("ojn"))gid("ojn").onclick=function(){var v=nm();if(v)oJoin(v,gid("ocd").value)};
+  if(gid("ocd"))gid("ocd").onkeydown=function(e){if(e.key==="Enter"&&gid("ojn"))gid("ojn").click()};
+  if(gid("obk"))gid("obk").onclick=function(){nres();S.step="home";render()};
+  if(gid("olv"))gid("olv").onclick=function(){nres();S.step="home";render()};
+  if(gid("ogo"))gid("ogo").onclick=function(){oStart(+gid("ord").value)};
+  if(gid("oag"))gid("oag").onclick=function(){oStart(N.V.rounds)};
+  if(gid("osw"))gid("osw").onclick=function(){N.show=true;oRender()};
+  if(gid("ohd"))gid("ohd").onclick=function(){N.show=false;oRender()};
   if(gid("ook")){
-    var send=function(){var v=gid("ocl").value.trim();if(v)act({t:"clue",text:v})};
-    gid("ook").onclick=send;gid("ocl").onkeydown=function(e){if(e.key==="Enter")send()};
+    var ok=function(){var v=gid("ocl").value.trim();if(v)oSend({t:"clue",text:v})};
+    gid("ook").onclick=ok;gid("ocl").onkeydown=function(e){if(e.key==="Enter")ok()};gid("ocl").focus();
   }
-  [].forEach.call(document.querySelectorAll("[data-ov]"),function(b){b.onclick=function(){act({t:"vote",target:b.dataset.ov})}});
+  [].forEach.call(document.querySelectorAll("[data-ov]"),function(b){b.onclick=function(){oSend({t:"vote",target:b.dataset.ov})}});
 }
+window.addEventListener("beforeunload",function(){
+  if(N&&N.peer&&!N.rel){N.rel=true;try{
+    if(N.isHost)N.peer.publish(TP+N.code+"/all",JSON.stringify({t:"hostbye"}));
+    else if(N.cid&&N.code)N.peer.publish(TP+N.code+"/h",JSON.stringify({t:"bye",from:N.cid}));
+    N.peer.end();
+  }catch(e){}}
+});
 render();
 </script>
 </body>

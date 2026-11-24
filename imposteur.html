@@ -32,9 +32,10 @@ button.ghost:hover{background:rgba(92,255,138,.1)}
 .chips button{width:auto;margin:0;padding:2px 10px;background:transparent;color:var(--ink);border:0;font-size:20px}
 .big{font-size:clamp(2.2rem,12vw,3.6rem);font-weight:900;color:var(--accent);text-align:center;margin:18px 0}
 .center{text-align:center}.warn{color:var(--warn);font-weight:bold}
+.muted{color:var(--muted);font-size:.9rem}
 .vote{background:var(--soft);color:var(--ink);border-color:var(--line)}
 .vote:hover{background:var(--line)}
-.log{background:rgba(0,0,0,.25);border-radius:8px;padding:8px 12px;margin-top:14px;font-size:15px}
+.log{background:rgba(0,0,0,.25);border-radius:8px;padding:8px 12px;margin-top:14px;font-size:15px;text-align:left}
 .log div{padding:2px 0}
 details{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 22px}
 details p{color:var(--muted)}
@@ -94,7 +95,8 @@ function render(){
     var v=S.votes.length;
     h+='<div class="card center"><h2>Vote</h2><p><b>'+esc(S.players[v])+'</b>, qui est l’imposteur ?</p>';
     S.players.forEach(function(p,k){if(k!==v)h+='<button class="vote" data-v="'+k+'">'+esc(p)+'</button>'});
-    h+='<div class="log">';S.clues.forEach(function(c){h+='<div><b>'+esc(c[0])+'</b> : '+esc(c[1])+'</div>'});h+='</div></div>';
+    if(S.clues.length){h+='<div class="log">';S.clues.forEach(function(c){h+='<div><b>'+esc(c[0])+'</b> : '+esc(c[1])+'</div>'});h+='</div>'}
+    h+='</div>';
   }else if(S.step==="result"){
     var t=S.players.map(function(){return 0});S.votes.forEach(function(x){if(t[x]!==undefined)t[x]++});
     var max=Math.max.apply(null,t),top=[];t.forEach(function(x,k){if(x===max)top.push(k)});
@@ -141,7 +143,7 @@ function nres(){
     else if(N.cid&&N.code)p.publish(TP+N.code+"/h",JSON.stringify({t:"bye",from:N.cid}));
     p.end(true);
   }catch(e){}}
-  N={peer:null,conn:null,conns:{},isHost:false,code:"",name:N?N.name:"",err:"",G:null,V:null,show:false,wait:false,cid:"",rel:false};
+  N={peer:null,conn:null,conns:{},isHost:false,code:"",name:N?N.name:"",err:"",G:null,V:null,show:false,wait:false,cid:""};
 }
 function onlineInit(){
   S.msg="";S.step="online";nres();
@@ -301,7 +303,9 @@ function oRender(){
     h+='<div class="card center"><p>Code de la partie</p><div class="code">'+esc(N.code)+'</div><p>Partage ce code avec les autres joueurs.</p></div>';
     if(V.phase==="lobby"){
       h+='<div class="card"><h2>Joueurs ('+V.players.length+')</h2><ul class="chips">';
-      V.players.forEach(function(p){h+='<li>'+esc(p.name)+(p.id==="H"?' (hôte)':'')+'</li>'});
+      V.players.forEach(function(p){
+        h+='<li><span>'+esc(p.name)+(p.id==="H"?' (hôte)':'')+'</span>'+(p.on===false?'<span class="muted">déconnecté</span>':'')+'</li>';
+      });
       h+='</ul>';
       if(N.isHost){
         var curRounds=(N.G&&N.G.rounds)||V.rounds||2;
@@ -333,4 +337,96 @@ function oRender(){
           var rem=V.players.filter(function(p){return p.on&&V.voted.indexOf(p.id)<0}).length;
           h+='<p>Vote enregistré ! En attente des autres joueurs ('+rem+' restant'+(rem>1?'s':'')+')…</p>';
         }
-        h+='<div class="log">';V.clues.forEach(function(c){h+='<div><b>'+
+        if(V.clues.length){h+='<div class="log">';V.clues.forEach(function(c){h+='<div><b>'+pname(c.id)+'</b> : '+esc(c.text)+'</div>'});h+='</div>'}
+        h+='<button class="ghost" id="olv">Quitter</button></div>';
+      }else if(V.phase==="result"){
+        var counts={},max=0,top=[];
+        V.order.forEach(function(id){counts[id]=0});
+        Object.keys(V.votes||{}).forEach(function(voter){
+          var target=V.votes[voter];
+          if(counts[target]!==undefined){counts[target]++;if(counts[target]>max)max=counts[target]}
+        });
+        Object.keys(counts).forEach(function(id){if(counts[id]===max)top.push(id)});
+        var caught=top.length===1&&top[0]===V.imp;
+        h+='<div class="card center"><h2>Résultat</h2>';
+        h+='<p class="win">'+(caught?'Les joueurs gagnent !':'L’imposteur gagne !')+'</p>';
+        h+='<p>L’imposteur était <b>'+pname(V.imp)+'</b>.</p>';
+        h+='<p>Mot du groupe : <b>'+esc(V.w1)+'</b><br>Mot de l’imposteur : <b>'+esc(V.w2)+'</b></p>';
+        h+='<div class="log">';
+        V.order.forEach(function(id){
+          var nb=counts[id]||0;
+          h+='<div>'+pname(id)+' : '+nb+' vote'+(nb>1?'s':'')+'</div>';
+        });
+        h+='</div>';
+        if(N.isHost){
+          var nextRounds=(N.G&&N.G.rounds)||V.rounds||2;
+          h+='<label for="ord2">Tours d’indices</label><select id="ord2">';
+          [1,2,3].forEach(function(r){h+='<option value="'+r+'"'+(r===nextRounds?' selected':'')+'>'+r+'</option>'});
+          h+='</select><button id="oagain">Rejouer</button><button class="ghost" id="olobby">Retour au salon</button>';
+        }else{
+          h+='<p class="muted">En attente que l’hôte lance une nouvelle partie…</p>';
+        }
+        h+='<button class="ghost" id="olv">Quitter</button></div>';
+      }
+    }
+  }
+  app.innerHTML=h;oBind();
+}
+function oBind(){
+  function $(i){return document.getElementById(i)}
+  if($("onm"))$("onm").oninput=function(){if(N)N.name=this.value};
+  if($("ocd"))$("ocd").oninput=function(){
+    this.value=this.value.toUpperCase().replace(/[^A-Z]/g,"").slice(0,4);
+    if(N)N.code=this.value;
+  };
+  if($("ocr"))$("ocr").onclick=function(){
+    var nm=($("onm")?$("onm").value:N.name).trim()||"Hôte";
+    N.name=nm;oCreate(nm);
+  };
+  if($("ojn"))$("ojn").onclick=function(){
+    var nm=($("onm")?$("onm").value:N.name).trim()||"Joueur";
+    var cd=($("ocd")?$("ocd").value:N.code).trim();
+    N.name=nm;oJoin(nm,cd);
+  };
+  if($("obk"))$("obk").onclick=function(){
+    if(N&&N.peer){try{N.peer.end(true)}catch(e){}}
+    N=null;S.step="home";render();
+  };
+  if($("ord"))$("ord").onchange=function(){if(N&&N.G)N.G.rounds=+this.value};
+  if($("ord2"))$("ord2").onchange=function(){if(N&&N.G)N.G.rounds=+this.value};
+  if($("ogo"))$("ogo").onclick=function(){
+    var r=$("ord")?+$("ord").value:(N.G?N.G.rounds:2);
+    oStart(r);
+  };
+  if($("osw"))$("osw").onclick=function(){N.show=true;oRender()};
+  if($("ohd"))$("ohd").onclick=function(){N.show=false;oRender()};
+  if($("ook")){
+    var sendClue=function(){
+      var tx=$("ocl").value.trim();
+      if(!tx)return;
+      oSend({t:"clue",text:tx});
+    };
+    $("ook").onclick=sendClue;
+    $("ocl").onkeydown=function(e){if(e.key==="Enter")sendClue()};
+    $("ocl").focus();
+  }
+  [].forEach.call(document.querySelectorAll("[data-ov]"),function(b){
+    b.onclick=function(){oSend({t:"vote",target:b.dataset.ov})};
+  });
+  if($("oagain"))$("oagain").onclick=function(){
+    var r=$("ord2")?+$("ord2").value:(N.G?N.G.rounds:2);
+    oStart(r);
+  };
+  if($("olobby"))$("olobby").onclick=function(){
+    if(!N||!N.isHost||!N.G)return;
+    N.G.phase="lobby";N.G.clues=[];N.G.votes={};N.show=false;N.err="";
+    broadcast();
+  };
+  if($("olv"))$("olv").onclick=function(){
+    nres();N=null;S.step="home";render();
+  };
+}
+render();
+</script>
+</body>
+</html>

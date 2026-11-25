@@ -7,7 +7,6 @@
   <script src="https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js"></script>
   <link rel="stylesheet" href="style.css">
   <style>
-    /* Styles spécifiques pour l'application LOLOCHAT */
     body {
       display: flex;
       flex-direction: column;
@@ -113,6 +112,7 @@
       border: 1px solid var(--line, #334155);
       border-radius: 10px;
       padding: 12px;
+      overflow-wrap: anywhere;
     }
     .msg.sys {
       border-style: dashed;
@@ -173,7 +173,8 @@
 
   <script>
     const MAX_TEXT = 2000;
-    const MAX_IMG_BYTES = 5 * 1024 * 1024;
+    // Les brokers MQTT publics rejettent souvent les gros messages > ~300-500 Ko
+    const MAX_IMG_BYTES = 350 * 1024;
     const BROKERS = [
       "wss://broker.emqx.io:8084/mqtt",
       "wss://broker.hivemq.com:8884/mqtt"
@@ -190,6 +191,7 @@
       membersMap: new Map(),
       messages: [],
       pendingImage: null,
+      pendingImageName: "",
       error: "",
       status: "",
       busy: false,
@@ -242,15 +244,25 @@
     }
 
     function addSystemMessage(text) {
-      state.messages.push({ id: "sys_" + Date.now() + Math.random(), system: true, text });
+      state.messages.push({ id: "sys_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6), system: true, text });
       render();
+    }
+
+    function updateMembersUI() {
+      const el = document.getElementById("membersBar");
+      if (!el) return;
+      const active = getActiveMembers();
+      el.innerHTML = `
+        <h1>LOLOCHAT <span class="pill">${active.length} en ligne</span></h1>
+        <div class="sub">Connecté : <strong>${escapeHtml(state.pseudo)}</strong> (${active.map(escapeHtml).join(", ")})</div>
+      `;
     }
 
     function getActiveMembers() {
       const now = Date.now();
       const names = [state.pseudo];
       for (const [id, info] of state.membersMap.entries()) {
-        if (now - info.lastSeen < 18000) {
+        if (now - info.lastSeen < 22000) {
           names.push(info.pseudo);
         } else {
           state.membersMap.delete(id);
@@ -261,12 +273,17 @@
 
     function publishPacket(packet) {
       if (state.client && state.client.connected && state.topic) {
-        state.client.publish(state.topic, JSON.stringify({
-          ...packet,
-          senderId: state.clientId,
-          pseudo: state.pseudo,
-          ts: Date.now()
-        }));
+        try {
+          state.client.publish(state.topic, JSON.stringify({
+            ...packet,
+            senderId: state.clientId,
+            pseudo: state.pseudo,
+            ts: Date.now()
+          }));
+        } catch (err) {
+          state.error = "Échec de l'envoi réseau (message peut-être trop lourd).";
+          render();
+        }
       }
     }
 
@@ -277,7 +294,14 @@
       }
       if (state.client) {
         try {
-          publishPacket({ type: "leave" });
+          if (state.client.connected && state.topic) {
+            state.client.publish(state.topic, JSON.stringify({
+              type: "leave",
+              senderId: state.clientId,
+              pseudo: state.pseudo,
+              ts: Date.now()
+            }));
+          }
           state.client.end(true);
         } catch {}
         state.client = null;
@@ -337,9 +361,10 @@
                 : `Connecté au salon ${code}.`
             );
 
+            if (state.presenceTimer) clearInterval(state.presenceTimer);
             state.presenceTimer = setInterval(() => {
               publishPacket({ type: "ping" });
-              render();
+              updateMembersUI();
             }, 6000);
           });
         });
@@ -365,14 +390,14 @@
               state.messages.push(data.msg);
               render();
             } else if (data.type === "ping") {
-              render();
+              updateMembersUI();
             }
           } catch {}
         });
 
         client.on("error", () => {
           if (!connectedOnce) {
-            client.end(true);
+            try { client.end(true); } catch {}
             brokerIndex++;
             if (brokerIndex < BROKERS.length) {
               tryConnect();
@@ -428,24 +453,38 @@
     function handleImage(e) {
       const file = e.target.files[0];
       state.error = "";
-      if (!file) { state.pendingImage = null; return; }
+      if (!file) {
+        state.pendingImage = null;
+        state.pendingImageName = "";
+        return render();
+      }
       if (!["image/png", "image/gif"].includes(file.type)) {
         state.error = "Seules les images PNG et GIF sont acceptées.";
         e.target.value = "";
         return render();
       }
       if (file.size > MAX_IMG_BYTES) {
-        state.error = "L'image dépasse la limite de 5 Mo.";
+        state.error = "Pour passer par le relais réseau, l'image doit faire maximum 350 Ko.";
         e.target.value = "";
         return render();
       }
       const reader = new FileReader();
       reader.onload = () => {
         state.pendingImage = reader.result;
+        state.pendingImageName = file.name;
         state.status = "Image prête : " + file.name;
         render();
       };
       reader.readAsDataURL(file);
+    }
+
+    function clearPendingImage() {
+      state.pendingImage = null;
+      state.pendingImageName = "";
+      state.status = "";
+      const fileInput = document.getElementById("imgInput");
+      if (fileInput) fileInput.value = "";
+      render();
     }
 
     function sendMessage(e) {
@@ -453,7 +492,7 @@
       state.error = "";
       state.status = "";
       const input = document.getElementById("msgText");
-      const text = input.value.trim();
+      const text = input ? input.value.trim() : "";
 
       if (text.length > MAX_TEXT) {
         state.error = "Maximum 2 000 caractères.";
@@ -477,6 +516,7 @@
       publishPacket({ type: "chat", msg });
 
       state.pendingImage = null;
+      state.pendingImageName = "";
       render();
     }
 
@@ -499,6 +539,7 @@
         membersMap: new Map(),
         messages: [],
         pendingImage: null,
+        pendingImageName: "",
         error: "",
         status: "",
         busy: false,
@@ -512,6 +553,9 @@
     function render() {
       const app = document.getElementById("app");
       if (!app) return;
+
+      const draftEl = document.getElementById("msgText");
+      const draftText = draftEl ? draftEl.value : "";
 
       if (state.view === "auth") {
         app.innerHTML = `
@@ -551,14 +595,14 @@
 
       app.innerHTML = `
         <div class="chat-header">
-          <div>
+          <div id="membersBar">
             <h1>LOLOCHAT <span class="pill">${activeMembers.length} en ligne</span></h1>
             <div class="sub">Connecté : <strong>${escapeHtml(state.pseudo)}</strong> (${activeMembers.map(escapeHtml).join(", ")})</div>
           </div>
           <div class="row">
             <span class="code-badge" title="Code à partager">${escapeHtml(state.roomCode)}</span>
-            <button class="secondary" onclick="copyCode()">Copier</button>
-            <button class="danger" onclick="leaveRoom()">Quitter</button>
+            <button type="button" class="secondary" onclick="copyCode()">Copier</button>
+            <button type="button" class="danger" onclick="leaveRoom()">Quitter</button>
           </div>
         </div>
         ${(state.error || state.status) ? `<div class="box" style="padding-bottom:0">
@@ -581,9 +625,15 @@
           ).join("")}
         </div>
         <form class="composer" onsubmit="sendMessage(event)">
-          <textarea id="msgText" rows="3" maxlength="${MAX_TEXT}" placeholder="Écris ton message (max 2 000 caractères)..."></textarea>
+          <textarea id="msgText" rows="3" maxlength="${MAX_TEXT}" placeholder="Écris ton message (max 2 000 caractères)...">${escapeHtml(draftText)}</textarea>
+          ${state.pendingImage ? `
+            <div class="row">
+              <span class="sub">Pièce jointe : <strong>${escapeHtml(state.pendingImageName)}</strong></span>
+              <button type="button" class="secondary" onclick="clearPendingImage()">Retirer l'image</button>
+            </div>
+          ` : ""}
           <div class="row" style="justify-content:space-between">
-            <input type="file" accept="image/png,image/gif" onchange="handleImage(event)" style="max-width:280px" />
+            <input id="imgInput" type="file" accept="image/png,image/gif" onchange="handleImage(event)" style="max-width:280px" />
             <button type="submit">Envoyer</button>
           </div>
         </form>
@@ -595,6 +645,5 @@
 
     render();
   </script>
-  <script src="script.js" defer></script>
 </body>
 </html>

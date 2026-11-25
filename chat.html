@@ -16,7 +16,7 @@
       overflow-x: hidden;
     }
 
-    /* Couche des snowflakes */
+    /* Couche des snowflakes verts du site de base */
     .snow {
       position: fixed;
       inset: 0;
@@ -24,26 +24,23 @@
       overflow: hidden;
       z-index: 1;
     }
-    .snowflake {
+    .flake {
       position: absolute;
-      top: -24px;
-      color: rgba(255, 255, 255, 0.75);
+      top: -28px;
+      color: var(--accent, #5cff8a);
       user-select: none;
       pointer-events: none;
-      animation-name: snowfall;
+      animation-name: flake-fall;
       animation-timing-function: linear;
       animation-iteration-count: infinite;
-      text-shadow: 0 0 6px rgba(255, 255, 255, 0.35);
+      text-shadow: 0 0 8px rgba(92, 255, 138, 0.35);
     }
-    @keyframes snowfall {
+    @keyframes flake-fall {
       0% {
-        transform: translate3d(0, -24px, 0) rotate(0deg);
-      }
-      50% {
-        transform: translate3d(18px, 50vh, 0) rotate(180deg);
+        transform: translate3d(0, -28px, 0) rotate(0deg);
       }
       100% {
-        transform: translate3d(-12px, 105vh, 0) rotate(360deg);
+        transform: translate3d(var(--drift, 0px), 106vh, 0) rotate(360deg);
       }
     }
 
@@ -195,7 +192,7 @@
   </style>
 </head>
 <body>
-  <div class="snow" id="snowLayer" aria-hidden="true"></div>
+  <div class="snow" aria-hidden="true"></div>
 
   <header class="top" style="width: 100%;">
     <div class="wrap" style="width: 100%; max-width: 100%;">
@@ -212,23 +209,54 @@
   <div class="chat-container" id="app"></div>
 
   <script>
-    (function initSnowflakes() {
-      const layer = document.getElementById("snowLayer");
-      if (!layer) return;
-      const count = 36;
-      const glyphs = ["❄", "•", "❅"];
-      for (let i = 0; i < count; i++) {
-        const flake = document.createElement("span");
-        flake.className = "snowflake";
-        flake.textContent = glyphs[i % glyphs.length];
-        flake.style.left = (Math.random() * 100).toFixed(2) + "%";
-        flake.style.fontSize = (10 + Math.random() * 12).toFixed(1) + "px";
-        flake.style.opacity = (0.25 + Math.random() * 0.65).toFixed(2);
-        const duration = (7 + Math.random() * 10).toFixed(2);
-        const delay = (-Math.random() * 12).toFixed(2);
-        flake.style.animationDuration = duration + "s";
-        flake.style.animationDelay = delay + "s";
-        layer.appendChild(flake);
+    (function () {
+      var enter = document.getElementById("enter");
+      var snow = document.querySelector(".snow");
+      var seen = false;
+
+      try {
+        seen = sessionStorage.getItem("entered") === "1";
+      } catch (e) {}
+
+      if (enter) {
+        function close() {
+          enter.classList.add("hidden");
+          try {
+            sessionStorage.setItem("entered", "1");
+          } catch (e) {}
+        }
+
+        if (seen) {
+          enter.classList.add("hidden");
+        } else {
+          enter.focus();
+        }
+
+        enter.addEventListener("click", close);
+        enter.addEventListener("keydown", function (e) {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            close();
+          }
+        });
+      }
+
+      if (
+        snow &&
+        !(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches)
+      ) {
+        for (var i = 0; i < 28; i++) {
+          var f = document.createElement("span");
+          f.className = "flake";
+          f.textContent = "⌖°❅°⌖";
+          f.style.left = Math.random() * 100 + "%";
+          f.style.fontSize = 10 + Math.random() * 12 + "px";
+          f.style.opacity = 0.25 + Math.random() * 0.7;
+          f.style.animationDuration = 6 + Math.random() * 10 + "s";
+          f.style.animationDelay = Math.random() * -12 + "s";
+          f.style.setProperty("--drift", -80 + Math.random() * 160 + "px");
+          snow.appendChild(f);
+        }
       }
     })();
 
@@ -417,308 +445,4 @@
             state.status = "";
             state.membersMap.clear();
 
-            publishPacket({ type: "join" });
-            addSystemMessage(
-              isCreator
-                ? `Salon créé. Partage le code ${code} en privé pour inviter tes amis.`
-                : `Connecté au salon ${code}.`
-            );
-
-            if (state.presenceTimer) clearInterval(state.presenceTimer);
-            state.presenceTimer = setInterval(() => {
-              publishPacket({ type: "ping" });
-              updateMembersUI();
-            }, 6000);
-          });
-        });
-
-        client.on("message", (_t, payload) => {
-          try {
-            const data = JSON.parse(payload.toString());
-            if (!data || data.senderId === state.clientId) return;
-
-            state.membersMap.set(data.senderId, {
-              pseudo: data.pseudo || "Membre",
-              lastSeen: Date.now()
-            });
-
-            if (data.type === "join") {
-              publishPacket({ type: "ping" });
-              addSystemMessage(`${data.pseudo} a rejoint le salon.`);
-            } else if (data.type === "leave") {
-              state.membersMap.delete(data.senderId);
-              addSystemMessage(`${data.pseudo} a quitté le salon.`);
-            } else if (data.type === "chat" && data.msg && !state.seenIds.has(data.msg.id)) {
-              state.seenIds.add(data.msg.id);
-              state.messages.push(data.msg);
-              render();
-            } else if (data.type === "ping") {
-              updateMembersUI();
-            }
-          } catch {}
-        });
-
-        client.on("error", () => {
-          if (!connectedOnce) {
-            try { client.end(true); } catch {}
-            brokerIndex++;
-            if (brokerIndex < BROKERS.length) {
-              tryConnect();
-            } else {
-              cleanupClient();
-              state.error = "Impossible de joindre le relais réseau. Vérifie ta connexion Internet.";
-              render();
-            }
-          }
-        });
-      };
-
-      tryConnect();
-    }
-
-    async function createRoom(e) {
-      e.preventDefault();
-      if (state.busy) return;
-      const pseudo = document.getElementById("hostPseudo").value.trim();
-      const pw = document.getElementById("hostPw").value;
-
-      if (!pseudo || pw.length < 4) {
-        state.error = "Entre un pseudo et un mot de passe (4 caractères minimum).";
-        return render();
-      }
-      if (!await checkOrSaveLocalAccount(pseudo, pw)) {
-        state.error = "Mot de passe incorrect pour ce pseudo sur cet appareil.";
-        return render();
-      }
-
-      await connectToRoom(pseudo, generateRoomCode(), true);
-    }
-
-    async function joinRoom(e) {
-      e.preventDefault();
-      if (state.busy) return;
-      const pseudo = document.getElementById("guestPseudo").value.trim();
-      const pw = document.getElementById("guestPw").value;
-      const code = normalizeCode(document.getElementById("joinCode").value);
-
-      if (!pseudo || pw.length < 4 || !code) {
-        state.error = "Remplis le pseudo, le mot de passe (4+ caractères) et le code d'invitation.";
-        return render();
-      }
-      if (!await checkOrSaveLocalAccount(pseudo, pw)) {
-        state.error = "Mot de passe incorrect pour ce pseudo sur cet appareil.";
-        return render();
-      }
-
-      await connectToRoom(pseudo, code, false);
-    }
-
-    function handleImage(e) {
-      const file = e.target.files[0];
-      state.error = "";
-      if (!file) {
-        state.pendingImage = null;
-        state.pendingImageName = "";
-        return render();
-      }
-      if (!["image/png", "image/gif"].includes(file.type)) {
-        state.error = "Seules les images PNG et GIF sont acceptées.";
-        e.target.value = "";
-        return render();
-      }
-      if (file.size > MAX_IMG_BYTES) {
-        state.error = "Pour passer par le relais réseau, l'image doit faire maximum 350 Ko.";
-        e.target.value = "";
-        return render();
-      }
-      const reader = new FileReader();
-      reader.onload = () => {
-        state.pendingImage = reader.result;
-        state.pendingImageName = file.name;
-        state.status = "Image prête : " + file.name;
-        render();
-      };
-      reader.readAsDataURL(file);
-    }
-
-    function clearPendingImage() {
-      state.pendingImage = null;
-      state.pendingImageName = "";
-      state.status = "";
-      const fileInput = document.getElementById("imgInput");
-      if (fileInput) fileInput.value = "";
-      render();
-    }
-
-    function sendMessage(e) {
-      e.preventDefault();
-      state.error = "";
-      state.status = "";
-      const input = document.getElementById("msgText");
-      const text = input ? input.value.trim() : "";
-
-      if (text.length > MAX_TEXT) {
-        state.error = "Maximum 2 000 caractères.";
-        return render();
-      }
-      if (!text && !state.pendingImage) {
-        state.error = "Écris un message ou choisis une image PNG/GIF.";
-        return render();
-      }
-
-      const msg = {
-        id: Date.now() + "_" + Math.random().toString(36).slice(2, 8),
-        author: state.pseudo,
-        text,
-        image: state.pendingImage,
-        time: new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })
-      };
-
-      state.seenIds.add(msg.id);
-      state.messages.push(msg);
-      publishPacket({ type: "chat", msg });
-
-      if (input) input.value = "";
-      state.pendingImage = null;
-      state.pendingImageName = "";
-      render();
-      document.getElementById("msgText")?.focus();
-    }
-
-    function copyCode() {
-      navigator.clipboard?.writeText(state.roomCode);
-      state.status = "Code copié dans le presse-papiers !";
-      render();
-    }
-
-    function leaveRoom() {
-      cleanupClient();
-      state = {
-        view: "auth",
-        pseudo: "",
-        roomCode: "",
-        topic: "",
-        client: null,
-        clientId: "lolo_" + Math.random().toString(36).slice(2, 10),
-        seenIds: new Set(),
-        membersMap: new Map(),
-        messages: [],
-        pendingImage: null,
-        pendingImageName: "",
-        error: "",
-        status: "",
-        busy: false,
-        presenceTimer: null
-      };
-      render();
-    }
-
-    window.addEventListener("beforeunload", cleanupClient);
-
-    function render() {
-      const app = document.getElementById("app");
-      if (!app) return;
-
-      const draftEl = document.getElementById("msgText");
-      const draftText = draftEl ? draftEl.value : "";
-
-      if (state.view === "auth") {
-        app.innerHTML = `
-          <div class="chat-header">
-            <div>
-              <h1>LOLOCHAT</h1>
-              <div class="sub">Salon privé sécurisé sans serveur</div>
-            </div>
-          </div>
-          <div class="box grid">
-            ${state.error ? `<div class="error">${escapeHtml(state.error)}</div>` : ""}
-            ${state.status ? `<div class="ok">${escapeHtml(state.status)}</div>` : ""}
-            <div class="two-cols">
-              <form class="chat-card" onsubmit="createRoom(event)">
-                <strong>1. Créer un salon</strong>
-                <div class="sub">Génère un code unique pour inviter tes amis.</div>
-                <input id="hostPseudo" placeholder="Ton pseudo" maxlength="25" required />
-                <input id="hostPw" type="password" placeholder="Mot de passe" required />
-                <button type="submit" ${state.busy ? "disabled" : ""}>Créer le salon</button>
-              </form>
-
-              <form class="chat-card" onsubmit="joinRoom(event)">
-                <strong>2. Rejoindre un salon</strong>
-                <div class="sub">Entre le code fourni par ton ami.</div>
-                <input id="guestPseudo" placeholder="Ton pseudo" maxlength="25" required />
-                <input id="guestPw" type="password" placeholder="Mot de passe" required />
-                <input id="joinCode" placeholder="Code (ex: LOLO-1234-ABCD)" required />
-                <button type="submit" class="secondary" ${state.busy ? "disabled" : ""}>Rejoindre</button>
-              </form>
-            </div>
-          </div>
-        `;
-        return;
-      }
-
-      const activeMembers = getActiveMembers();
-
-      app.innerHTML = `
-        <div class="chat-header">
-          <div id="membersBar">
-            <h1>LOLOCHAT <span class="pill">${activeMembers.length} en ligne</span></h1>
-            <div class="sub">Connecté : <strong>${escapeHtml(state.pseudo)}</strong> (${activeMembers.map(escapeHtml).join(", ")})</div>
-          </div>
-          <div class="row">
-            <span class="code-badge" title="Code à partager">${escapeHtml(state.roomCode)}</span>
-            <button type="button" class="secondary" onclick="copyCode()">Copier</button>
-            <button type="button" class="danger" onclick="leaveRoom()">Quitter</button>
-          </div>
-        </div>
-        ${(state.error || state.status) ? `<div class="box" style="padding-bottom:0">
-          ${state.error ? `<div class="error">${escapeHtml(state.error)}</div>` : ""}
-          ${state.status ? `<div class="ok">${escapeHtml(state.status)}</div>` : ""}
-        </div>` : ""}
-        <div class="messages" id="msgList">
-          ${state.messages.map(m => m.system
-            ? `<div class="msg sys">${escapeHtml(m.text)}</div>`
-            : `
-              <div class="msg">
-                <div class="msg-head">
-                  <strong>${escapeHtml(m.author)}</strong>
-                  <span>${escapeHtml(m.time)}</span>
-                </div>
-                ${m.text ? `<div>${escapeHtml(m.text).replaceAll("\n", "<br>")}</div>` : ""}
-                ${m.image ? `<img src="${m.image}" alt="Image jointe" />` : ""}
-              </div>
-            `
-          ).join("")}
-        </div>
-        <form class="composer" onsubmit="sendMessage(event)">
-          <textarea id="msgText" rows="3" maxlength="${MAX_TEXT}" placeholder="Écris ton message (Entrée pour envoyer, Maj+Entrée pour nouvelle ligne)...">${escapeHtml(draftText)}</textarea>
-          ${state.pendingImage ? `
-            <div class="row">
-              <span class="sub">Pièce jointe : <strong>${escapeHtml(state.pendingImageName)}</strong></span>
-              <button type="button" class="secondary" onclick="clearPendingImage()">Retirer l'image</button>
-            </div>
-          ` : ""}
-          <div class="row" style="justify-content:space-between">
-            <input id="imgInput" type="file" accept="image/png,image/gif" onchange="handleImage(event)" style="max-width:280px" />
-            <button type="submit">Envoyer</button>
-          </div>
-        </form>
-      `;
-
-      const list = document.getElementById("msgList");
-      if (list) list.scrollTop = list.scrollHeight;
-
-      const msgInput = document.getElementById("msgText");
-      if (msgInput) {
-        msgInput.onkeydown = (e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            msgInput.form?.requestSubmit();
-          }
-        };
-      }
-    }
-
-    render();
-  </script>
-</body>
-</html>
+            publishPacket

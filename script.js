@@ -32,8 +32,10 @@
 
   if (
     snow &&
+    !snow.dataset.snowReady &&
     !(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches)
   ) {
+    snow.dataset.snowReady = "1";
     for (var i = 0; i < 28; i++) {
       var f = document.createElement("span");
       f.className = "flake";

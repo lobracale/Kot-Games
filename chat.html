@@ -12,7 +12,47 @@
       flex-direction: column;
       align-items: center;
       padding: 0;
+      position: relative;
+      overflow-x: hidden;
     }
+
+    /* Couche des snowflakes */
+    .snow {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+      z-index: 1;
+    }
+    .snowflake {
+      position: absolute;
+      top: -24px;
+      color: rgba(255, 255, 255, 0.75);
+      user-select: none;
+      pointer-events: none;
+      animation-name: snowfall;
+      animation-timing-function: linear;
+      animation-iteration-count: infinite;
+      text-shadow: 0 0 6px rgba(255, 255, 255, 0.35);
+    }
+    @keyframes snowfall {
+      0% {
+        transform: translate3d(0, -24px, 0) rotate(0deg);
+      }
+      50% {
+        transform: translate3d(18px, 50vh, 0) rotate(180deg);
+      }
+      100% {
+        transform: translate3d(-12px, 105vh, 0) rotate(360deg);
+      }
+    }
+
+    header.top,
+    .chat-container {
+      position: relative;
+      z-index: 2;
+    }
+
     .chat-container {
       width: 100%;
       max-width: 820px;
@@ -155,7 +195,7 @@
   </style>
 </head>
 <body>
-  <div class="snow" aria-hidden="true"></div>
+  <div class="snow" id="snowLayer" aria-hidden="true"></div>
 
   <header class="top" style="width: 100%;">
     <div class="wrap" style="width: 100%; max-width: 100%;">
@@ -172,8 +212,27 @@
   <div class="chat-container" id="app"></div>
 
   <script>
+    (function initSnowflakes() {
+      const layer = document.getElementById("snowLayer");
+      if (!layer) return;
+      const count = 36;
+      const glyphs = ["❄", "•", "❅"];
+      for (let i = 0; i < count; i++) {
+        const flake = document.createElement("span");
+        flake.className = "snowflake";
+        flake.textContent = glyphs[i % glyphs.length];
+        flake.style.left = (Math.random() * 100).toFixed(2) + "%";
+        flake.style.fontSize = (10 + Math.random() * 12).toFixed(1) + "px";
+        flake.style.opacity = (0.25 + Math.random() * 0.65).toFixed(2);
+        const duration = (7 + Math.random() * 10).toFixed(2);
+        const delay = (-Math.random() * 12).toFixed(2);
+        flake.style.animationDuration = duration + "s";
+        flake.style.animationDelay = delay + "s";
+        layer.appendChild(flake);
+      }
+    })();
+
     const MAX_TEXT = 2000;
-    // Les brokers MQTT publics rejettent souvent les gros messages > ~300-500 Ko
     const MAX_IMG_BYTES = 350 * 1024;
     const BROKERS = [
       "wss://broker.emqx.io:8084/mqtt",
@@ -244,18 +303,12 @@
     }
 
     function addSystemMessage(text) {
-      state.messages.push({ id: "sys_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6), system: true, text });
+      state.messages.push({
+        id: "sys_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+        system: true,
+        text
+      });
       render();
-    }
-
-    function updateMembersUI() {
-      const el = document.getElementById("membersBar");
-      if (!el) return;
-      const active = getActiveMembers();
-      el.innerHTML = `
-        <h1>LOLOCHAT <span class="pill">${active.length} en ligne</span></h1>
-        <div class="sub">Connecté : <strong>${escapeHtml(state.pseudo)}</strong> (${active.map(escapeHtml).join(", ")})</div>
-      `;
     }
 
     function getActiveMembers() {
@@ -271,6 +324,16 @@
       return [...new Set(names)];
     }
 
+    function updateMembersUI() {
+      const el = document.getElementById("membersBar");
+      if (!el) return;
+      const active = getActiveMembers();
+      el.innerHTML = `
+        <h1>LOLOCHAT <span class="pill">${active.length} en ligne</span></h1>
+        <div class="sub">Connecté : <strong>${escapeHtml(state.pseudo)}</strong> (${active.map(escapeHtml).join(", ")})</div>
+      `;
+    }
+
     function publishPacket(packet) {
       if (state.client && state.client.connected && state.topic) {
         try {
@@ -280,7 +343,7 @@
             pseudo: state.pseudo,
             ts: Date.now()
           }));
-        } catch (err) {
+        } catch {
           state.error = "Échec de l'envoi réseau (message peut-être trop lourd).";
           render();
         }
@@ -515,9 +578,11 @@
       state.messages.push(msg);
       publishPacket({ type: "chat", msg });
 
+      if (input) input.value = "";
       state.pendingImage = null;
       state.pendingImageName = "";
       render();
+      document.getElementById("msgText")?.focus();
     }
 
     function copyCode() {
@@ -625,7 +690,7 @@
           ).join("")}
         </div>
         <form class="composer" onsubmit="sendMessage(event)">
-          <textarea id="msgText" rows="3" maxlength="${MAX_TEXT}" placeholder="Écris ton message (max 2 000 caractères)...">${escapeHtml(draftText)}</textarea>
+          <textarea id="msgText" rows="3" maxlength="${MAX_TEXT}" placeholder="Écris ton message (Entrée pour envoyer, Maj+Entrée pour nouvelle ligne)...">${escapeHtml(draftText)}</textarea>
           ${state.pendingImage ? `
             <div class="row">
               <span class="sub">Pièce jointe : <strong>${escapeHtml(state.pendingImageName)}</strong></span>
@@ -641,6 +706,16 @@
 
       const list = document.getElementById("msgList");
       if (list) list.scrollTop = list.scrollHeight;
+
+      const msgInput = document.getElementById("msgText");
+      if (msgInput) {
+        msgInput.onkeydown = (e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            msgInput.form?.requestSubmit();
+          }
+        };
+      }
     }
 
     render();

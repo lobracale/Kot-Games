@@ -242,44 +242,6 @@ h2 {
   text-align: right;
 }
 
-/* Page Chat */
-.cat-profile {
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
-  align-items: center;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 2rem;
-  margin-bottom: 2rem;
-}
-
-@media (min-width: 42rem) {
-  .cat-profile {
-    flex-direction: row;
-    align-items: flex-start;
-  }
-}
-
-.cat-avatar {
-  width: 160px;
-  height: 160px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 3px solid var(--accent);
-  box-shadow: 0 0 25px rgba(92, 255, 138, 0.25);
-  flex-shrink: 0;
-}
-
-.cat-gallery img {
-  width: 100%;
-  height: 220px;
-  object-fit: cover;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-}
-
 /* Réseaux sociaux */
 .socials {
   display: flex;
@@ -361,7 +323,7 @@ footer {
 .snow {
   position: fixed;
   inset: 0;
-  z-index: -1;
+  z-index: 1;
   pointer-events: none;
   overflow: hidden;
 }
